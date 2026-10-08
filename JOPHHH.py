@@ -19,7 +19,7 @@ from telegram.ext import (
 )
 
 # ⚠️ توکن رباتت را بین دو کوتیشن بنویس. این فایل را روی GitHub نگذار!
-TOKEN = "BOT_TUKEN"
+TOKEN = "BOT_TOKEN"
 ADMINS = {7409111335}
 DB_FILE = "gaoo66mmp.db"
 HTML = ParseMode.HTML
