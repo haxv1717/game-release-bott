@@ -1,5 +1,6 @@
 """🎮 Game Release Bot  (python-telegram-bot >= 21)"""
 import html
+import logging
 import os
 import re
 import sqlite3
@@ -15,25 +16,18 @@ from telegram.ext import (
     ChatMemberHandler,
     CommandHandler,
     MessageHandler,
+    TypeHandler,
     filters
 )
 
-TOKEN = (
-    os.environ.get("BOT_TOKEN")
-    or os.environ.get("TELEGRAM_BOT_TOKEN")
-    or os.environ.get("TOKEN")
-    or ""
-).strip().strip("\"'")
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    level=logging.INFO
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+log = logging.getLogger("gamebot")
 
-if not re.fullmatch(r"\d{6,12}:[A-Za-z0-9_-]{30,}", TOKEN):
-    raise SystemExit(
-        "\n❌ BOT_TOKEN is missing or malformed "
-        f"(got {len(TOKEN)} characters).\n"
-        "Railway → service → Variables → name: BOT_TOKEN, "
-        "value: the token from @BotFather "
-        "(looks like 123456789:AAH...). "
-        "No spaces, no quotes, not the @username.\n"
-    )
+TOKEN = os.environ["BOT_TOKEN"]
 ADMINS = {7409111335}
 _VOL = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or "/data"
 DB_FILE = (
@@ -1071,6 +1065,12 @@ def stats_text():
 
 
 async def admin(update: Update, ctx):
+    if not is_admin(update.effective_user.id):
+        log.warning(
+            "/admin ignored: user id %s is not an admin",
+            update.effective_user.id
+        )
+
     if (
         is_admin(update.effective_user.id)
         and update.effective_chat.type == ChatType.PRIVATE
@@ -1560,6 +1560,27 @@ async def on_message(update: Update, ctx):
 
 # ───────────────────────── Main ─────────────────────────
 
+async def log_update(update: Update, ctx):
+    u = update.effective_user
+    m = update.effective_message
+    cb = update.callback_query
+
+    log.info(
+        "update from user=%s: %s",
+        u.id if u else "?",
+        (cb.data if cb else (m.text or "<non-text>") if m else "<other>")[:40]
+    )
+
+
+async def on_error(update, ctx):
+    log.error("handler error", exc_info=ctx.error)
+
+
+async def post_init(app):
+    me = await app.bot.get_me()
+    log.info("✅ Connected as @%s (id %s)", me.username, me.id)
+
+
 def main():
     init_db()
 
@@ -1567,8 +1588,12 @@ def main():
         Application
         .builder()
         .token(TOKEN)
+        .post_init(post_init)
         .build()
     )
+
+    app.add_handler(TypeHandler(Update, log_update), group=-1)
+    app.add_error_handler(on_error)
 
     for name, fn in (
         ("start", start),
